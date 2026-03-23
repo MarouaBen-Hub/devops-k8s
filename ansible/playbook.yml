@@ -1,0 +1,21 @@
+---
+- name: Configuration des noeuds Kubernetes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Verifier Docker
+      command: docker --version
+      register: docker_version
+    - name: Afficher Docker
+      debug:
+        msg: "{{ docker_version.stdout }}"
+    - name: Kubelet actif
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+    - name: Containerd actif
+      systemd:
+        name: containerd
+        state: started
+        enabled: yes
