@@ -32,7 +32,7 @@ HTML_PAGE = """
 
 @app.route('/')
 def home():
-    version = os.getenv("APP_VERSION", "1.0")
+    version = os.getenv("APP_VERSION", "3.0")
     return render_template_string(HTML_PAGE, version=version)
 
 @app.route('/health')
