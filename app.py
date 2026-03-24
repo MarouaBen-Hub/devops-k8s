@@ -18,8 +18,7 @@ HTML_PAGE = """
   </style>
 </head>
 <body>
-# Exemple : ajouter une ligne temporaire pour test
-  print("Test modification live")
+print("Modification live pour démo")
   <h1> DevOps K8s Project</h1>
   <span class="badge">✅ Running</span>
   <div class="card">
