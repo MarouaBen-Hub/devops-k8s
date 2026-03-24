@@ -18,7 +18,7 @@ HTML_PAGE = """
   </style>
 </head>
 <body>
-print("Modification live pour démo")
+print("Modification live pour démo - TEST123")
   <h1> DevOps K8s Project</h1>
   <span class="badge">✅ Running</span>
   <div class="card">
