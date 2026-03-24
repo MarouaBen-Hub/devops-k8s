@@ -18,6 +18,7 @@ HTML_PAGE = """
   </style>
 </head>
 <body>
+print("🚀 Test modification live")
   <h1>🚀 DevOps K8s Project</h1>
   <span class="badge">✅ Running</span>
   <div class="card">
