@@ -10,9 +10,7 @@ def client():
 def test_home(client):
     response = client.get('/')
     assert response.status_code == 200
-    data = response.get_json()
-    assert data['status'] == 'running'
-    assert 'message' in data
+    assert b'DevOps K8s Project' in response.data
 
 def test_health(client):
     response = client.get('/health')
