@@ -18,7 +18,7 @@ HTML_PAGE = """
   </style>
 </head>
 <body>
-<h1>Modification live</h1>
+<h3>Modification live</h3>
   <h1> DevOps K8s Project</h1>
   <span class="badge">✅ Running</span>
   <div class="card">
