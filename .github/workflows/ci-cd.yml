@@ -7,6 +7,7 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -21,7 +22,7 @@ jobs:
 
       - name: Run tests
         run: |
-          python -c "from app import app; print('App imported successfully')"
+          pytest test_app.py -v
 
       - name: Build Docker image
         run: docker build -t devops-api:${{ github.sha }} .
