@@ -1,8 +1,6 @@
 name: CI/CD Pipeline
 
-on:
-  push:
-    branches: [ main ]
+branches: [ main, add-tests ]
 
 jobs:
   build-and-test:
