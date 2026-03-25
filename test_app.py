@@ -18,12 +18,3 @@ def test_health(client):
     response = client.get('/health')
     assert response.status_code == 200
     assert response.get_json()['status'] == 'healthy'
-```
-✅ Fichier **nouveau**, ne touche à rien d'existant.
-
----
-
-### Étape 3 — Ajouter `pytest` dans `requirements.txt`
-Ouvrir `requirements.txt` et ajouter juste une ligne :
-```
-pytest
