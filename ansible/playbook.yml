@@ -1,162 +1,94 @@
 ---
-# ═══════════════════════════════════════════════════════════════════
-# Playbook Ansible – Configuration cluster Kubernetes (Master + Worker)
-# ═══════════════════════════════════════════════════════════════════
-
-# ── ÉTAPE 1 : Configuration commune (master ET worker) ──────────────
-- name: Configuration commune - tous les noeuds
+- name: Configuration commune (Master & Worker)
   hosts: all
   become: yes
-
   tasks:
-    - name: Mise à jour des paquets
+    - name: Mise à jour des paquets apt
       apt:
         update_cache: yes
         upgrade: dist
 
-    - name: Installation des dépendances système
+    - name: Installation des dépendances
       apt:
         name:
           - apt-transport-https
           - ca-certificates
           - curl
           - gnupg
-          - software-properties-common
+          - lsb-release
         state: present
 
-    - name: Désactiver le swap (requis par Kubernetes)
-      command: swapoff -a
-
-    - name: Supprimer le swap du fstab (persistant)
-      replace:
-        path: /etc/fstab
-        regexp: '^([^#].*\sswap\s.*)$'
-        replace: '# \1'
-
-    - name: Activer les modules kernel nécessaires
-      modprobe:
-        name: "{{ item }}"
-        state: present
-      loop:
-        - overlay
-        - br_netfilter
-
-    - name: Paramètres réseau kernel pour Kubernetes
-      sysctl:
-        name: "{{ item.key }}"
-        value: "{{ item.value }}"
-        state: present
-        reload: yes
-      loop:
-        - { key: "net.bridge.bridge-nf-call-iptables",  value: "1" }
-        - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
-        - { key: "net.ipv4.ip_forward",                 value: "1" }
-
-    - name: Ajouter la clé GPG Docker
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
-
-    - name: Ajouter le dépôt Docker
-      apt_repository:
-        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
-        state: present
-
-    - name: Installation de containerd (runtime Kubernetes)
+    - name: Installation de Docker
       apt:
-        name: containerd.io
+        name: docker.io
         state: present
-        update_cache: yes
 
-    - name: Configurer containerd avec SystemdCgroup
-      shell: |
-        mkdir -p /etc/containerd
-        containerd config default | tee /etc/containerd/config.toml
-        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-
-    - name: Redémarrer et activer containerd
-      systemd:
-        name: containerd
-        state: restarted
+    - name: Démarrage de Docker
+      service:
+        name: docker
+        state: started
         enabled: yes
 
-    - name: Ajouter la clé GPG Kubernetes
+    - name: Ajout de la clé GPG de Kubernetes
       apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
         state: present
 
-    - name: Ajouter le dépôt Kubernetes
+    - name: Ajout du dépôt Kubernetes
       apt_repository:
-        repo: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+        repo: deb https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /
         state: present
 
-    - name: Installation de kubeadm, kubelet, kubectl
+    - name: Installation de kubelet, kubeadm et kubectl
       apt:
         name:
-          - kubelet=1.29.*
-          - kubeadm=1.29.*
-          - kubectl=1.29.*
+          - kubelet
+          - kubeadm
+          - kubectl
         state: present
-        update_cache: yes
 
-    - name: Bloquer les mises à jour automatiques de Kubernetes
+    - name: Verrouillage des versions K8s
       dpkg_selections:
         name: "{{ item }}"
         selection: hold
-      loop:
-        - kubelet
-        - kubeadm
-        - kubectl
+      loop: [ 'kubelet', 'kubeadm', 'kubectl' ]
 
-# ── ÉTAPE 2 : Initialisation du Master ──────────────────────────────
-- name: Initialisation du Master Kubernetes
+- name: Configuration du Master Node
   hosts: master
   become: yes
-
   tasks:
-    - name: Initialiser le cluster avec kubeadm
-      command: >
-        kubeadm init
-        --pod-network-cidr=10.244.0.0/16
-        --ignore-preflight-errors=NumCPU
-      args:
-        creates: /etc/kubernetes/admin.conf
+    - name: Initialisation du cluster Kubernetes
+      command: kubeadm init --pod-network-cidr=10.244.0.0/16
+      register: kubeadm_init
+      ignore_errors: yes # Au cas où il est déjà initialisé
 
-    - name: Créer le dossier .kube pour l'utilisateur ubuntu
+    - name: Création du dossier .kube pour l'utilisateur ubuntu
       file:
         path: /home/ubuntu/.kube
         state: directory
         owner: ubuntu
         group: ubuntu
 
-    - name: Copier le kubeconfig
+    - name: Copie du fichier admin.conf pour kubectl
       copy:
         src: /etc/kubernetes/admin.conf
         dest: /home/ubuntu/.kube/config
         remote_src: yes
         owner: ubuntu
         group: ubuntu
-        mode: '0600'
 
-    - name: Installer Flannel (réseau CNI)
-      become_user: ubuntu
-      command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+    - name: Installation du réseau CNI (Flannel)
+      become: false
+      command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 
-    - name: Récupérer le token de jonction
+    - name: Génération de la commande de join pour le worker
       command: kubeadm token create --print-join-command
       register: join_command
 
-    - name: Sauvegarder le join command
-      set_fact:
-        k8s_join_command: "{{ join_command.stdout }}"
-
-# ── ÉTAPE 3 : Jonction du Worker au cluster ──────────────────────────
-- name: Jonction du Worker au cluster
+- name: Configuration du Worker Node
   hosts: workers
   become: yes
-
   tasks:
-    - name: Rejoindre le cluster Kubernetes
-      command: "{{ hostvars[groups['master'][0]]['k8s_join_command'] }}"
-      args:
-        creates: /etc/kubernetes/kubelet.conf
+    - name: Jonction du worker au cluster
+      command: "{{ hostvars['master-node']['join_command'].stdout }}"
+      ignore_errors: yes
