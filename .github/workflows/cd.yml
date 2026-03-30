@@ -1,0 +1,21 @@
+name: CD - Deploy Only
+
+on:
+  workflow_dispatch:   # lancement manuel seulement
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+
+      - name: Deploy to Kubernetes
+        env:
+          KUBECONFIG: kubeconfig
+        run: |
+          kubectl apply -f k8s/
