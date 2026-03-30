@@ -60,7 +60,7 @@ jobs:
       - name: Checkout du code
         uses: actions/checkout@v3
 
-     - name: Configuration de kubectl
+      - name: Configuration de kubectl
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
