@@ -1,6 +1,9 @@
 name: CI/CD Pipeline - DevOps K8s
 
 on:
+  push:name: CI/CD Pipeline - DevOps K8s
+
+on:
   push:
     branches: [ main ]
   pull_request:
@@ -8,6 +11,91 @@ on:
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-k8s-app
+
+jobs:
+  # ─────────────────────────────────────────
+  # ÉTAPE 1 : BUILD & TEST
+  # ─────────────────────────────────────────
+  build-and-test:
+    name: 🔨 Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v3
+
+      - name: Setup Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Installation des dépendances
+        run: |
+          pip install -r requirements.txt
+
+      - name: Exécution des tests pytest
+        run: |
+          pytest test_app.py -v
+
+  # ─────────────────────────────────────────
+  # ÉTAPE 2 : BUILD & PUSH DOCKER IMAGE
+  # ─────────────────────────────────────────
+  docker-build-push:
+    name: 🐳 Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v3
+
+      - name: Login sur Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build et Push de l'image Docker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # ─────────────────────────────────────────
+  # ÉTAPE 3 : DÉPLOIEMENT SUR KUBERNETES
+  # ─────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v3
+
+      - name: Configuration de kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Mise à jour de l'image dans le manifest Kubernetes
+        run: |
+          sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/deployment.yml
+
+      - name: Déploiement sur Kubernetes
+        run: |
+          kubectl apply -f k8s/deployment.yml
+          kubectl rollout status deployment/devops-app -n default --timeout=120s
+
+      - name: Vérification du déploiement
+        run: |
+          kubectl get pods -n default
+          kubectl get services -n default
 
 jobs:
   # ─────────────────────────────────────────
