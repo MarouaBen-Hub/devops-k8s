@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: devops-app
-          image: DOCKERHUB_USERNAME/devops-k8s-app:IMAGE_TAG
+          image: maroua2026/devops-k8s-app:IMAGE_TAG
           ports:
             - containerPort: 5000
           # Liveness probe : Kubernetes redémarre le pod si /health ne répond plus
