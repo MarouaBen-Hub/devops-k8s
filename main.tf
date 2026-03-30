@@ -19,6 +19,7 @@ provider "aws" {
   region = "us-east-1"
 }
 
+# ── Génération de la clé SSH ──────────────────────────────────────────────────
 resource "tls_private_key" "my_key" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -35,10 +36,12 @@ resource "local_file" "private_key" {
   file_permission = "0400"
 }
 
+# ── Security Group Kubernetes ─────────────────────────────────────────────────
 resource "aws_security_group" "k8s_sg" {
   name        = "k8s-security-group"
   description = "Security group pour cluster Kubernetes"
 
+  # SSH
   ingress {
     description = "SSH"
     from_port   = 22
@@ -47,14 +50,25 @@ resource "aws_security_group" "k8s_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Kubernetes API Server
   ingress {
-    description = "Kubernetes API"
+    description = "Kubernetes API Server"
     from_port   = 6443
     to_port     = 6443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # etcd (communication interne master)
+  ingress {
+    description = "etcd server client API"
+    from_port   = 2379
+    to_port     = 2380
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Flannel VXLAN (réseau CNI)
   ingress {
     description = "Flannel VXLAN"
     from_port   = 8472
@@ -63,27 +77,34 @@ resource "aws_security_group" "k8s_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Kubelet API
   ingress {
-    description = "Kubelet"
+    description = "Kubelet API"
     from_port   = 10250
     to_port     = 10250
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-ingress {
-  description = "HTTP temp"
-  from_port   = 8888
-  to_port     = 8888
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
-ingress {
-  description = "NodePort"
-  from_port   = 30000
-  to_port     = 30000
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
+
+  # kube-scheduler & kube-controller-manager
+  ingress {
+    description = "kube-scheduler et controller-manager"
+    from_port   = 10251
+    to_port     = 10252
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # NodePort – accès à l'application Flask
+  ingress {
+    description = "NodePort application"
+    from_port   = 30000
+    to_port     = 30000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Tout le trafic sortant autorisé
   egress {
     from_port   = 0
     to_port     = 0
@@ -96,33 +117,38 @@ ingress {
   }
 }
 
+# ── Instances EC2 ─────────────────────────────────────────────────────────────
 resource "aws_instance" "master" {
- ami = "ami-0866a3c8686eaeeba"
+  ami                    = "ami-0866a3c8686eaeeba"  # Ubuntu 22.04 us-east-1
   instance_type          = "t3.micro"
   key_name               = aws_key_pair.my_key.key_name
   vpc_security_group_ids = [aws_security_group.k8s_sg.id]
 
   tags = {
     Name = "k8s-master"
+    Role = "master"
   }
 }
 
 resource "aws_instance" "worker" {
-  ami = "ami-0866a3c8686eaeeba"
+  ami                    = "ami-0866a3c8686eaeeba"
   instance_type          = "t3.micro"
   key_name               = aws_key_pair.my_key.key_name
   vpc_security_group_ids = [aws_security_group.k8s_sg.id]
 
   tags = {
     Name = "k8s-worker"
+    Role = "worker"
   }
 }
 
+# ── Outputs ───────────────────────────────────────────────────────────────────
 output "master_ip" {
-  value = aws_instance.master.public_ip
+  description = "IP publique du Master Node"
+  value       = aws_instance.master.public_ip
 }
 
 output "worker_ip" {
-  value = aws_instance.worker.public_ip
+  description = "IP publique du Worker Node"
+  value       = aws_instance.worker.public_ip
 }
-
