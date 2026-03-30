@@ -19,10 +19,10 @@ HTML_PAGE = """
 </head>
 <body>
 <h3>Modification live</h3>
-  <h1> DevOps K8s Project</h1>
+  <h1>DevOps K8s Project</h1>
   <span class="badge">✅ Running</span>
   <div class="card">
-    <p><strong>Version :</strong>version</p>
+    <p><strong>Version :</strong> {{ version }}</p>
     <p><strong>Environnement :</strong> Kubernetes</p>
     <p><strong>CI/CD :</strong> GitHub Actions ✅</p>
     <p class="version">Déployé automatiquement via pipeline CI/CD</p>
