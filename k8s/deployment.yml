@@ -1,36 +1,62 @@
+---
+# ── DEPLOYMENT ──────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: devops-api
+  name: devops-app
+  namespace: default
   labels:
-    app: devops-api
+    app: devops-app
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: devops-api
+      app: devops-app
   template:
     metadata:
       labels:
-        app: devops-api
+        app: devops-app
     spec:
       containers:
-      - name: devops-api
-        image: devops-api:1.0
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 5000
+        - name: devops-app
+          image: maroua2026/devops-k8s-app:IMAGE_TAG
+          ports:
+            - containerPort: 5000
+          # Liveness probe : Kubernetes redémarre le pod si /health ne répond plus
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          # Readiness probe : le pod reçoit du trafic seulement s'il est prêt
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+
 ---
+# ── SERVICE (NodePort) ───────────────────────────────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
-  name: devops-api-service
+  name: devops-app-service
+  namespace: default
 spec:
-  selector:
-    app: devops-api
   type: NodePort
+  selector:
+    app: devops-app
   ports:
-  - protocol: TCP
-    port: 5000
-    targetPort: 5000
-    nodePort: 30000
+    - protocol: TCP
+      port: 80          # port interne au cluster
+      targetPort: 5000  # port du container Flask
+      nodePort: 30000   # port exposé sur le Worker Node
