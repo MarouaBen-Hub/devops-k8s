@@ -10,39 +10,28 @@ env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-k8s-app
 
 jobs:
-  build-and-test:
-    name: Build and Test
+
+  # ─────────────────────────────────────────
+  # JOB 1 : BUILD
+  # ─────────────────────────────────────────
+  build:
+    name: 🔨 Build Docker Image
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout du code
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup Python 3.9
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Installation des dependances
-        run: pip install -r requirements.txt
-
-      - name: Execution des tests pytest
-        run: pytest test_app.py -v
-
-  docker-build-push:
-    name: Docker Build and Push
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    steps:
-      - name: Checkout du code
-        uses: actions/checkout@v3
-
-      - name: Login sur Docker Hub
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build et Push de l image Docker
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -50,31 +39,65 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  deploy:
-    name: Deploy to Kubernetes
+  # ─────────────────────────────────────────
+  # JOB 2 : TEST
+  # ─────────────────────────────────────────
+  test:
+    name: 🧪 Run Tests
     runs-on: ubuntu-latest
-    needs: docker-build-push
-    if: github.ref == 'refs/heads/main'
+    needs: build
+
     steps:
-      - name: Checkout du code
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Configuration de kubectl
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: pytest test_app.py -v
+
+  # ─────────────────────────────────────────
+  # JOB 3 : DEPLOY
+  # ─────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/my-key-terraform.pem
+          chmod 400 ~/.ssh/my-key-terraform.pem
+          ssh-keyscan -H ${{ secrets.MASTER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Mise a jour de l image dans le manifest
-        run: sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/deployment.yml
-
-      - name: Deploiement sur Kubernetes
+      - name: Update image tag on Master node
         run: |
-          kubectl apply -f k8s/deployment.yml
-          kubectl rollout status deployment/devops-app -n default --timeout=120s
+          ssh -i ~/.ssh/my-key-terraform.pem ubuntu@${{ secrets.MASTER_IP }} \
+            "kubectl set image deployment/flask-app \
+             flask-app=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+             --record"
 
-      - name: Verification du deploiement
+      - name: Wait for rollout
         run: |
-          kubectl get pods -n default
-          kubectl get services -n default
+          ssh -i ~/.ssh/my-key-terraform.pem ubuntu@${{ secrets.MASTER_IP }} \
+            "kubectl rollout status deployment/flask-app --timeout=120s"
+
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/my-key-terraform.pem ubuntu@${{ secrets.MASTER_IP }} \
+            "kubectl get pods -l app=flask-app"
